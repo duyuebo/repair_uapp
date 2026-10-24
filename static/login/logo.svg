@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="16" x2="448" y2="496" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17508D" />
+      <stop offset="0.52" stop-color="#0E3B72" />
+      <stop offset="1" stop-color="#0A2B57" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(120 64) rotate(45) scale(390)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4C93D0" stop-opacity="0.32" />
+      <stop offset="1" stop-color="#4C93D0" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="z" x1="150" y1="140" x2="300" y2="370" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ACAF4" />
+      <stop offset="1" stop-color="#13A5DD" />
+    </linearGradient>
+    <linearGradient id="swoosh" x1="92" y1="318" x2="380" y2="404" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#47CB86" />
+      <stop offset="1" stop-color="#2BAE67" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)" />
+  <rect width="512" height="512" rx="116" fill="url(#glow)" />
+  <path d="M 96 330 C 58 372, 64 414, 112 434 C 176 461, 264 443, 326 402 C 358 380, 376 348, 384 296 C 366 346, 336 382, 296 404 C 230 440, 150 444, 108 414 C 74 389, 80 354, 114 324 Z" fill="url(#swoosh)" />
+  <rect x="350" y="112" width="56" height="122" rx="14" fill="#F5A623" />
+  <rect x="318" y="145" width="120" height="56" rx="14" fill="#F5A623" />
+  <path d="M 132 148 L 306 148 L 306 190 L 214 326 L 312 326 L 312 368 L 118 368 L 118 326 L 214 190 L 132 190 Z" fill="url(#z)" stroke="#2BB8E8" stroke-width="6" stroke-linejoin="round" />
+  <g transform="translate(384 154) rotate(38)">
+    <path d="M -17 -14 A 24 24 0 1 0 17 -14" fill="none" stroke="#0A2B57" stroke-width="24" stroke-linecap="round" />
+    <path d="M 0 22 L 0 78" fill="none" stroke="#0A2B57" stroke-width="24" stroke-linecap="round" />
+    <path d="M -17 -14 A 24 24 0 1 0 17 -14" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" />
+    <path d="M 0 22 L 0 78" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" />
+  </g>
+</svg>
