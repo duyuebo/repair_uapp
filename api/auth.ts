@@ -1,4 +1,7 @@
 import request from "@/utils/request";
+import type { CommonResult } from "./common";
+
+export type { CommonResult } from "./common";
 
 export interface WxLoginPayload {
   code: string;
@@ -9,13 +12,6 @@ export interface WxLoginPayload {
 export interface WxLoginResult {
   sessionValue: string | null;
   inSystem: number;
-}
-
-export interface CommonResult<T> {
-  status: number;
-  code: string;
-  message: string;
-  obj: T | null;
 }
 
 /**

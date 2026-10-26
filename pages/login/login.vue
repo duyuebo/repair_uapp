@@ -78,7 +78,7 @@ import { getStorage, setStorage, removeStorage } from "@/utils/storage";
 import { wxLogin } from "@/api/auth";
 
 const REMEMBER_KEY = "login_remember";
-const PROJECT_PAGE = "/pages/project/project";
+const REPAIR_PAGE = "/pages/repair/repair";
 
 export default {
   data() {
@@ -198,7 +198,7 @@ export default {
 
           toast({ title: "登录成功", icon: "success" });
           setTimeout(() => {
-            uni.reLaunch({ url: PROJECT_PAGE });
+            uni.reLaunch({ url: REPAIR_PAGE });
           }, 450);
         } else {
           const inSystem = res && res.obj ? res.obj.inSystem : undefined;

@@ -1,6 +1,6 @@
 import env from "@/utils/env";
 import { modal, toast } from "@/utils/extendApi";
-import { getStorage } from "@/utils/storage";
+import { getStorage, removeStorage } from "@/utils/storage";
 
 class UniRequest {
   constructor(config = {}) {
@@ -15,10 +15,10 @@ class UniRequest {
       "Content-type": "application/json"
     },
     timeout: 60000,
-    isLoading: true // 新增：默认显示 Loading，可通过单个请求传入 { isLoading: false } 静默请求
+    isLoading: true // 默认显示 Loading，可通过单个请求传入 { isLoading: false } 静默请求
   };
 
-  loadingQueue = [];
+  activeRequests = 0;
   timerId = null;
 
   interceptors = {
@@ -26,9 +26,60 @@ class UniRequest {
     response: (response) => response
   };
 
+  /**
+   * 显示 Loading，并处理并发请求的延迟关闭。
+   */
+  startLoading(configs) {
+    if (!configs.isLoading) return;
+
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
+    }
+    this.activeRequests += 1;
+    if (this.activeRequests === 1) {
+      uni.showLoading({
+        title: "加载中...",
+        mask: true
+      });
+    }
+  }
+
+  /**
+   * 所有并发请求结束后延迟关闭 Loading，避免页面闪烁。
+   */
+  finishLoading(configs) {
+    if (!configs.isLoading) return;
+
+    this.activeRequests = Math.max(0, this.activeRequests - 1);
+    if (this.activeRequests > 0) return;
+
+    this.timerId = setTimeout(() => {
+      this.timerId = null;
+      if (this.activeRequests === 0) {
+        uni.hideLoading();
+      }
+    }, 500);
+  }
+
+  /**
+   * 登录失效统一处理：清理旧 token，避免登录页反复跳转。
+   */
+  async handleUnauthorized() {
+    await modal({
+      title: "认证失败",
+      content: "登录已失效，请重新登录!",
+      showCancel: false
+    });
+    removeStorage("token");
+    uni.reLaunch({
+      url: "/pages/login/login"
+    });
+  }
+
   request(options) {
     return new Promise((resolve, reject) => {
-      // 1. 深度合并 header 与配置项
+      // 1. 合并 header 与配置项
       const header = Object.assign({}, this.defaults.header, options.header);
       const opts = Object.assign({}, this.defaults, options, { header });
 
@@ -39,66 +90,127 @@ class UniRequest {
       // 3. 调用请求拦截器
       const configs = this.interceptors.request(opts);
 
-      // 4. 控制 Loading 显示与防抖队列
-      if (configs.isLoading) {
-        this.timerId && clearTimeout(this.timerId);
-        this.loadingQueue.length === 0 && uni.showLoading({
-          title: "加载中...",
-          mask: true
-        });
-        this.loadingQueue.push("queue");
-      }
+      // 4. 控制 Loading 显示
+      this.startLoading(configs);
 
       // 5. 发起网络请求
       uni.request({
         ...configs,
         success: async (res) => {
           if (res.statusCode === 200) {
-            resolve(this.interceptors.response({
-              response: res,
-              success: true
-            }));
+            resolve(
+              this.interceptors.response({
+                response: res,
+                success: true
+              })
+            );
           } else if (res.statusCode === 401) {
-            // 认证失败处理（若后端采用 HTTP 200 + 业务码判定，可将此逻辑移至 statusCode === 200 分支内）
-            await modal({
-              title: "认证失败",
-              content: "登录已失效，请重新登录!",
-              showCancel: false
-            });
-            uni.reLaunch({
-              url: "/pages/login/login"
-            });
-            reject(this.interceptors.response({
-              response: res,
-              success: false
-            }));
+            await this.handleUnauthorized();
+            reject(
+              this.interceptors.response({
+                response: res,
+                success: false,
+                silent: true
+              })
+            );
           } else {
-            reject(this.interceptors.response({
-              response: res,
-              success: false
-            }));
+            reject(
+              this.interceptors.response({
+                response: res,
+                success: false
+              })
+            );
           }
         },
         fail: (err) => {
-          reject(this.interceptors.response({
-            response: err,
-            success: false
-          }));
+          reject(
+            this.interceptors.response({
+              response: err,
+              success: false
+            })
+          );
         },
         complete: () => {
-          if (configs.isLoading) {
-            this.loadingQueue.pop();
-            // 只有当所有并发请求全部完成（队列清空）时，才压入缓冲占位符并启动 500ms 延迟关闭
-            if (this.loadingQueue.length === 0) {
-              this.loadingQueue.push("queue");
-              this.timerId = setTimeout(() => {
-                this.loadingQueue.pop();
-                if (this.loadingQueue.length === 0) {
-                  uni.hideLoading();
-                }
-              }, 500);
+          this.finishLoading(configs);
+        }
+      });
+    });
+  }
+
+  /**
+   * 上传文件。uni.uploadFile 不支持 uni.request 的 data/header 规则，
+   * 这里复用 token 注入与 Loading 队列，并保持业务响应结构一致。
+   */
+  upload(url, filePath, name = "file", config = {}) {
+    return new Promise((resolve, reject) => {
+      const opts = Object.assign({}, this.defaults, config, {
+        url,
+        filePath,
+        name,
+        method: "POST",
+        header: Object.assign({}, config.header)
+      });
+
+      const isExternal = /^https?:\/\//.test(opts.url);
+      opts.url = isExternal ? opts.url : opts.baseUrl + opts.url;
+
+      const configs = this.interceptors.request(opts);
+      // 让 uni.uploadFile 自动生成 multipart/form-data 边界
+      Object.keys(configs.header).forEach((key) => {
+        if (key.toLowerCase() === "content-type") {
+          delete configs.header[key];
+        }
+      });
+
+      this.startLoading(configs);
+
+      uni.uploadFile({
+        url: configs.url,
+        filePath,
+        name,
+        header: configs.header,
+        formData: configs.formData || {},
+        success: async (res) => {
+          if (res.statusCode === 200) {
+            try {
+              const data =
+                typeof res.data === "string" ? JSON.parse(res.data) : res.data;
+              resolve(data);
+            } catch (error) {
+              toast({
+                title: "上传响应解析失败，请稍后重试",
+                icon: "error"
+              });
+              reject(error);
             }
+          } else if (res.statusCode === 401) {
+            await this.handleUnauthorized();
+            reject(
+              this.interceptors.response({
+                response: res,
+                success: false,
+                silent: true
+              })
+            );
+          } else {
+            reject(
+              this.interceptors.response({
+                response: res,
+                success: false
+              })
+            );
           }
+        },
+        fail: (err) => {
+          reject(
+            this.interceptors.response({
+              response: err,
+              success: false
+            })
+          );
+        },
+        complete: () => {
+          this.finishLoading(configs);
         }
       });
     });
@@ -137,12 +249,14 @@ instance.interceptors.request = (config = {}) => {
 };
 
 // 响应拦截器
-instance.interceptors.response = ({ response, success }) => {
+instance.interceptors.response = ({ response, success, silent = false }) => {
   if (!success) {
-    toast({
-      title: "系统出错，请稍后重试！",
-      icon: "error"
-    });
+    if (!silent) {
+      toast({
+        title: "系统出错，请稍后重试！",
+        icon: "error"
+      });
+    }
     return response;
   }
   // 直接返回业务数据层 res.data，方便页面直接解构使用

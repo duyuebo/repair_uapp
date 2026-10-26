@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 当前状态（重要）
 
 - 项目基于 `hello-uniapp` 官方示例模板改名而来（`manifest.json` `name` = `repair_uapp`），大量示例页面仍是模板遗留：`pages/API`、`pages/component`、`pages/template`、`pages/tabBar`、`pages/extUI` 以及 `components/`、`common/` 均为示例/演示代码，不是业务代码。
-- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/project/project` 项目选择占位页。报修列表、报修表单、报修详情尚未实现。
+- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表、报修详情、我的尚未实现，`pages/records`、`pages/profile` 当前为占位页。
 - 目前 `utils/` 下的网络、提示、存储、环境封装以及 `api/` 下的接口定义属于本项目自有代码。
 
 ## 技术栈
@@ -35,16 +35,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 所有网络请求必须走此封装（`import request from "@/utils/request"`），不要直接用 `uni.request`：
 
-- 导出一个 `UniRequest` 单例，提供 `get/post/put/delete/all` 方法。
+- 导出一个 `UniRequest` 单例，提供 `get/post/put/delete/upload/all` 方法。`upload` 用于 `uni.uploadFile` 场景（如图片上传），复用 token 与 Loading 逻辑，并自动移除 `Content-Type` 以生成 multipart 边界。
 - `baseUrl` 来自 `utils/env.ts`；传入 `http(s)://` 绝对路径时不拼接。
 - 请求拦截器：从 `utils/storage.ts` 读取 `token` 写入请求头 `Authorization: Bearer <token>`。
 - 响应拦截器：成功时直接返回 `res.data`（页面可直接解构业务数据）；失败时调用 `toast` 提示。
-- 内置 Loading 防抖队列：默认 `isLoading: true`，并发请求全部完成后再延迟 500ms 关闭；单请求可传 `{ isLoading: false }` 静默。
-- `statusCode === 401` 时弹 `modal` 提示并 `uni.reLaunch` 到 `/pages/login/login`。
+- 内置 Loading 防抖：默认 `isLoading: true`，并发请求全部完成后再延迟 500ms 关闭；单请求可传 `{ isLoading: false }` 静默。
+- `statusCode === 401` 时弹 `modal` 提示、清除本地 token 并 `uni.reLaunch` 到 `/pages/login/login`。
 
 ### 接口层 `api/`
 
 - `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；首次绑定或换绑需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。
+- `api/repair.ts`：报修业务接口：
+  - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目与账户名。
+  - `uploadRepairPhoto`：`POST /repair/orders/photos`，multipart 字段名 `file`，返回 `fileStorePath`。
+  - `createRepairOrder`：`POST /repair/orders`，提交联系人、电话、故障描述与 `photoUrls`（最多 5 张）。
+- 后端业务失败通常仍返回 HTTP 200，需检查响应体 `status === 1` 且 `obj` 存在；`status === 0` 时读取 `message` 提示。
+
+### 报修页面 `pages/repair/repair.vue`
+
+- 登录成功后由登录页 `reLaunch` 到报修页；无 token 时页面会跳回登录页。
+- 页面加载时调用 `/repair/account/me`，项目名与账户名缓存在 storage `repair_profile`；联系人/电话缓存在 `repair_contact`，输入失焦、页面隐藏/卸载和提交成功时都会保存。
+- 图片选择后立即逐张上传，成功后保留 `fileStorePath` 用于提交；最多 5 张，单张 10MB，仅支持图片。
+- 提交成功弹窗显示 `orderNo`，清空描述与图片，保留联系人和电话。
+- 底部导航组件为 `components/business-tabbar/business-tabbar.vue`；报修记录、我的当前为占位页。
+
+### 已知问题
+
+- 后端返回的 `id`、`projectId`、工单 `id` 等 Long 主键是 19 位，超过 JS `Number.MAX_SAFE_INTEGER`，前端解析会丢失精度。当前报修页只使用 `orderNo`，不依赖这些 ID；后续做详情页前应让后端将 Long 序列化为字符串，或前端使用能保留大整数的解析方式。
 
 ### 环境 `utils/env.ts`
 
