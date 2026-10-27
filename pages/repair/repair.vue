@@ -324,23 +324,29 @@ export default {
       });
     },
     async uploadPhoto(photo) {
-      photo.status = "uploading";
-      photo.fileStorePath = "";
+      // 模板遍历 photos 拿到的是 Vue 的响应式代理，而 choosePhotos 里传入的是
+      // 刚 push 进去的原始对象。直接修改原始对象不会触发视图更新，上传成功后
+      // 遮罩会一直停留在“上传中”，所以这里按 key 找回列表中的响应式对象。
+      const target =
+        this.photos.find((item) => item.key === photo.key) || photo;
+
+      target.status = "uploading";
+      target.fileStorePath = "";
 
       // 记录上传发起时的账号，页面卸载后草稿仍写回原账号
       const draftAccount = getLoginAccount();
 
       try {
-        const res = await uploadRepairPhoto(photo.localPath);
+        const res = await uploadRepairPhoto(target.localPath);
         if (res && res.status === 1 && res.obj && res.obj.fileStorePath) {
-          photo.fileStorePath = res.obj.fileStorePath;
-          photo.status = "done";
+          target.fileStorePath = res.obj.fileStorePath;
+          target.status = "done";
           if (!this.pageAlive) {
             updateRepairDraftPhoto(
-              photo.key,
+              target.key,
               {
                 status: "done",
-                fileStorePath: photo.fileStorePath
+                fileStorePath: target.fileStorePath
               },
               draftAccount
             );
@@ -348,18 +354,18 @@ export default {
           return;
         }
 
-        photo.status = "error";
+        target.status = "error";
         if (!this.pageAlive) {
-          updateRepairDraftPhoto(photo.key, { status: "error" }, draftAccount);
+          updateRepairDraftPhoto(target.key, { status: "error" }, draftAccount);
           return;
         }
         toast({
           title: (res && res.message) || "图片上传失败，请重试"
         });
       } catch (error) {
-        photo.status = "error";
+        target.status = "error";
         if (!this.pageAlive) {
-          updateRepairDraftPhoto(photo.key, { status: "error" }, draftAccount);
+          updateRepairDraftPhoto(target.key, { status: "error" }, draftAccount);
           return;
         }
         // 网络异常已由 request 层统一提示
