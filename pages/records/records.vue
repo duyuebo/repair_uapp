@@ -34,8 +34,11 @@
         <template v-if="activeState.items.length">
           <view
             v-for="(item, index) in activeState.items"
-            :key="item.orderNo || index"
+            :key="item.id || item.orderNo || index"
             class="record-card"
+            hover-class="record-card--pressed"
+            :hover-stay-time="60"
+            @tap="openDetail(item)"
           >
             <view class="record-card__head">
               <text class="record-card__order">工单号：{{ item.orderNo || "—" }}</text>
@@ -175,6 +178,16 @@ export default {
   },
   methods: {
     formatDateTime,
+    openDetail(item) {
+      if (!item || !item.id) {
+        toast({ title: "工单信息不完整" });
+        return;
+      }
+
+      uni.navigateTo({
+        url: `/pages/records/detail?id=${encodeURIComponent(item.id)}`
+      });
+    },
     statusText(item) {
       return item.statusText || STATUS_TEXT[item.status] || "未知状态";
     },
@@ -418,6 +431,10 @@ export default {
   background-color: #ffffff;
   border-radius: 16rpx;
   box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
+}
+
+.record-card--pressed {
+  background-color: #fafbfc;
 }
 
 .record-card__head {

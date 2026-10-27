@@ -52,6 +52,15 @@
 			}
 		},
 		{
+			"path": "pages/records/detail",
+			"style": {
+				"navigationBarTitleText": "报修详情",
+				"navigationBarTextStyle": "black",
+				"navigationBarBackgroundColor": "#FFFFFF",
+				"backgroundColor": "#F5F7FA"
+			}
+		},
+		{
 			"path": "pages/profile/profile",
 			"style": {
 				"navigationBarTitleText": "我的",

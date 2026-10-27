@@ -55,6 +55,35 @@ export interface RepairOrderListQuery {
   page?: number;
 }
 
+export interface RepairOrderPhoto {
+  id: string;
+  photoUrl: string | null;
+  photoAccessUrl: string | null;
+  photoType: number | string | null;
+  dtCreate: string | null;
+}
+
+export interface RepairOrderDetail {
+  id: string;
+  orderNo: string;
+  status: number;
+  statusText: string;
+  customerName: string | null;
+  projectName: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  faultDescription: string | null;
+  workerName: string | null;
+  workerPhone: string | null;
+  repairRemark: string | null;
+  dtCreate: string | null;
+  dtAccepted: string | null;
+  dtCompleted: string | null;
+  repairPhotos: RepairOrderPhoto[] | null;
+  constructionPhotos: RepairOrderPhoto[] | null;
+  photos: RepairOrderPhoto[] | null;
+}
+
 /**
  * 获取当前登录账户信息，用于展示项目名称和默认联系人。
  */
@@ -93,4 +122,16 @@ export const createRepairOrder = (
   data: RepairOrderPayload
 ): Promise<CommonResult<RepairOrderCreateResult>> => {
   return request.post("/repair/orders", data);
+};
+
+/**
+ * 查询报修工单详情。
+ * 后端同时返回 repairPhotos（故障照片）和 constructionPhotos（完工照片）。
+ */
+export const getRepairOrderDetail = (
+  id: string
+): Promise<CommonResult<RepairOrderDetail>> => {
+  return request.get(`/repair/orders/${encodeURIComponent(id)}`, {}, {
+    isLoading: false
+  });
 };
