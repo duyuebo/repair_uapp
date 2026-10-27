@@ -20,6 +20,7 @@ class UniRequest {
 
   activeRequests = 0;
   timerId = null;
+  unauthorizedTask: Promise<void> | null = null;
 
   interceptors = {
     request: (config) => config,
@@ -63,18 +64,39 @@ class UniRequest {
   }
 
   /**
-   * 登录失效统一处理：清理旧 token，避免登录页反复跳转。
+   * 登录失效统一处理：并发 401 只执行一次，避免重复弹窗和重复跳转。
+   * 处理完成后保留标记，等待登录成功后由 resetUnauthorized() 清除。
    */
-  async handleUnauthorized() {
-    await modal({
-      title: "认证失败",
-      content: "登录已失效，请重新登录!",
-      showCancel: false
-    });
+  handleUnauthorized(): Promise<void> {
+    if (this.unauthorizedTask) return this.unauthorizedTask;
+
+    // 先清理旧 token，避免弹窗期间其他请求继续携带失效凭证
     removeStorage("token");
-    uni.reLaunch({
-      url: "/pages/login/login"
-    });
+
+    this.unauthorizedTask = (async () => {
+      try {
+        await modal({
+          title: "认证失败",
+          content: "登录已失效，请重新登录!",
+          showCancel: false
+        });
+      } catch (error) {
+        // 弹窗异常不应阻塞跳转登录页
+      }
+
+      uni.reLaunch({
+        url: "/pages/login/login"
+      });
+    })();
+
+    return this.unauthorizedTask;
+  }
+
+  /**
+   * 登录成功后调用，允许下一次 401 重新触发登录失效处理。
+   */
+  resetUnauthorized() {
+    this.unauthorizedTask = null;
   }
 
   request(options) {

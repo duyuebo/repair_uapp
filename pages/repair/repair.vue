@@ -145,7 +145,22 @@
 
 <script>
 import { toast, modal } from "@/utils/extendApi";
-import { getStorage, setStorage } from "@/utils/storage";
+import { getStorage } from "@/utils/storage";
+import {
+  getContactCache,
+  getLoginAccount,
+  getProfileCache,
+  setContactCache,
+  setLoginAccount,
+  setProfileCache
+} from "@/utils/repairCache";
+import {
+  clearRepairDraft,
+  getRepairDraft,
+  getRepairDraftPhoto,
+  setRepairDraft,
+  updateRepairDraftPhoto
+} from "@/utils/repairDraft";
 import {
   createRepairOrder,
   getRepairAccountProfile,
@@ -154,8 +169,6 @@ import {
 
 const MAX_PHOTOS = 5;
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024;
-const PROFILE_KEY = "repair_profile";
-const CONTACT_KEY = "repair_contact";
 const LOGIN_PAGE = "/pages/login/login";
 
 export default {
@@ -164,6 +177,8 @@ export default {
       statusBarHeight: 0,
       projectName: "",
       profileLoading: false,
+      pageAlive: true,
+      cacheReady: false,
       form: {
         faultDescription: "",
         contactName: "",
@@ -192,26 +207,32 @@ export default {
       return;
     }
 
+    this.pageAlive = true;
     const systemInfo = uni.getSystemInfoSync();
     this.statusBarHeight = systemInfo.statusBarHeight || 0;
     this.restoreCache();
+    this.cacheReady = true;
+    this.restoreDraft();
     this.loadProfile();
   },
   onHide() {
     this.saveContactCache();
+    this.saveDraft();
   },
   onUnload() {
+    this.pageAlive = false;
     this.saveContactCache();
+    this.saveDraft();
   },
   methods: {
     restoreCache() {
-      const profile = getStorage(PROFILE_KEY);
+      const profile = getProfileCache();
       if (profile) {
         this.projectName = profile.projectName || "";
         this.form.contactName = profile.accountName || "";
       }
 
-      const contact = getStorage(CONTACT_KEY);
+      const contact = getContactCache();
       if (contact) {
         if (contact.contactName) {
           this.form.contactName = contact.contactName;
@@ -220,6 +241,19 @@ export default {
           this.form.contactPhone = contact.contactPhone;
         }
       }
+    },
+    restoreDraft() {
+      const draft = getRepairDraft();
+      if (!draft) return;
+
+      this.form.faultDescription = draft.faultDescription || "";
+
+      // 页面卸载时仍未完成的上传，恢复后先按失败处理，用户可点击重试；
+      // 若原上传随后完成，草稿会更新，重试时可直接复用结果。
+      this.photos = (draft.photos || []).map((photo) => ({
+        ...photo,
+        status: photo.status === "uploading" ? "error" : photo.status
+      }));
     },
     async loadProfile() {
       if (this.profileLoading) return;
@@ -235,13 +269,19 @@ export default {
         }
 
         const profile = res.obj;
+
+        // 升级/直达场景没有 login_account 时，用后端账户名补上，保证缓存按账号隔离
+        if (!getLoginAccount() && profile.accountName) {
+          setLoginAccount(profile.accountName);
+        }
+
         this.projectName = profile.projectName || "";
         if (!this.form.contactName) {
           this.form.contactName = profile.accountName || "";
         }
 
         // 后端 Long 主键为 19 位，超过 JS 安全整数范围，前端暂不缓存精度已丢失的 ID。
-        setStorage(PROFILE_KEY, {
+        setProfileCache({
           projectName: profile.projectName,
           accountName: profile.accountName
         });
@@ -287,25 +327,59 @@ export default {
       photo.status = "uploading";
       photo.fileStorePath = "";
 
+      // 记录上传发起时的账号，页面卸载后草稿仍写回原账号
+      const draftAccount = getLoginAccount();
+
       try {
         const res = await uploadRepairPhoto(photo.localPath);
         if (res && res.status === 1 && res.obj && res.obj.fileStorePath) {
           photo.fileStorePath = res.obj.fileStorePath;
           photo.status = "done";
+          if (!this.pageAlive) {
+            updateRepairDraftPhoto(
+              photo.key,
+              {
+                status: "done",
+                fileStorePath: photo.fileStorePath
+              },
+              draftAccount
+            );
+          }
           return;
         }
 
         photo.status = "error";
+        if (!this.pageAlive) {
+          updateRepairDraftPhoto(photo.key, { status: "error" }, draftAccount);
+          return;
+        }
         toast({
           title: (res && res.message) || "图片上传失败，请重试"
         });
       } catch (error) {
         photo.status = "error";
+        if (!this.pageAlive) {
+          updateRepairDraftPhoto(photo.key, { status: "error" }, draftAccount);
+          return;
+        }
         // 网络异常已由 request 层统一提示
       }
     },
     retryPhoto(photo) {
       if (photo.status === "uploading") return;
+
+      // 页面卸载期间原上传可能已完成，优先复用草稿里的结果
+      const draftPhoto = getRepairDraftPhoto(photo.key);
+      if (
+        draftPhoto &&
+        draftPhoto.status === "done" &&
+        draftPhoto.fileStorePath
+      ) {
+        photo.fileStorePath = draftPhoto.fileStorePath;
+        photo.status = "done";
+        return;
+      }
+
       this.uploadPhoto(photo);
     },
     removePhoto(index) {
@@ -355,9 +429,24 @@ export default {
       };
     },
     saveContactCache() {
-      setStorage(CONTACT_KEY, {
+      if (!this.cacheReady) return;
+
+      setContactCache({
         contactName: this.form.contactName.trim(),
         contactPhone: this.form.contactPhone.trim()
+      });
+    },
+    saveDraft() {
+      if (!this.cacheReady) return;
+
+      setRepairDraft({
+        faultDescription: this.form.faultDescription,
+        photos: this.photos.map((photo) => ({
+          key: photo.key,
+          localPath: photo.localPath,
+          fileStorePath: photo.fileStorePath,
+          status: photo.status
+        }))
       });
     },
     resetForm() {
@@ -407,6 +496,7 @@ export default {
         this.saveContactCache();
         const orderNo = res.obj.orderNo || "";
         this.resetForm();
+        clearRepairDraft();
         // 弹窗展示期间不再显示“提交中”，避免按钮状态与结果不一致。
         this.submitting = false;
 

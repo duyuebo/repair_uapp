@@ -22,9 +22,12 @@ export const modal = (options = {}) => {
     const opts = Object.assign({}, defaultOpt, options);
     uni.showModal({
       ...opts,
-      complete: ({ confirm, cancel }) => {
-        confirm && resolve(true);
-        cancel && resolve(false);
+      success: ({ confirm }) => {
+        resolve(Boolean(confirm));
+      },
+      // showModal 失败（例如已有弹窗）时也要结束 Promise，避免调用方永久挂起
+      fail: () => {
+        resolve(false);
       }
     });
   });

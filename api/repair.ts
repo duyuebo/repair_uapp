@@ -24,7 +24,8 @@ export interface RepairOrderPayload {
 }
 
 export interface RepairOrderCreateResult {
-  id: number;
+  // 后端 19 位 Long 主键，按字符串接收，避免 JS 精度丢失
+  id: string;
   orderNo: string;
   status: number;
   statusText: string;

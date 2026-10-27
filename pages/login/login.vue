@@ -75,6 +75,8 @@
 <script>
 import { toast } from "@/utils/extendApi";
 import { getStorage, setStorage, removeStorage } from "@/utils/storage";
+import { setLoginAccount } from "@/utils/repairCache";
+import request from "@/utils/request";
 import { wxLogin } from "@/api/auth";
 
 const REMEMBER_KEY = "login_remember";
@@ -189,6 +191,10 @@ export default {
         if (res && res.obj && res.obj.sessionValue) {
           loggedIn = true;
           setStorage("token", res.obj.sessionValue);
+          // 缓存按登录账号隔离，登录成功后记录当前账号
+          setLoginAccount(account);
+          // 新 token 已生效，允许后续 401 重新触发登录失效处理
+          request.resetUnauthorized();
 
           if (this.rememberPassword) {
             setStorage(REMEMBER_KEY, { account, password });
