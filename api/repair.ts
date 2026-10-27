@@ -1,9 +1,13 @@
 import request from "@/utils/request";
-import type { CommonResult } from "./common";
+import type { CommonResult, PagerResult } from "./common";
 
+/**
+ * 报修接口中的 Long 主键统一按 string 声明。
+ * endpoint-repair 需保持 Long -> string 的序列化配置，否则运行时仍会丢失精度。
+ */
 export interface RepairAccountProfile {
-  id: number;
-  projectId: number | null;
+  id: string;
+  projectId: string | null;
   projectName: string | null;
   accountName: string | null;
   wxName: string | null;
@@ -24,12 +28,31 @@ export interface RepairOrderPayload {
 }
 
 export interface RepairOrderCreateResult {
-  // 后端 19 位 Long 主键，按字符串接收，避免 JS 精度丢失
   id: string;
   orderNo: string;
   status: number;
   statusText: string;
   dtCreate: string;
+}
+
+export type RepairStatusGroup = "processing" | "completed";
+
+export interface RepairOrderListItem {
+  id: string;
+  orderNo: string;
+  status: number;
+  statusText: string;
+  faultDescription: string | null;
+  projectName: string | null;
+  contactName: string | null;
+  dtCreate: string | null;
+  workerName: string | null;
+  dtCompleted: string | null;
+}
+
+export interface RepairOrderListQuery {
+  statusGroup: RepairStatusGroup;
+  page?: number;
 }
 
 /**
@@ -39,6 +62,16 @@ export const getRepairAccountProfile = (): Promise<
   CommonResult<RepairAccountProfile>
 > => {
   return request.get("/repair/account/me", {}, { isLoading: false });
+};
+
+/**
+ * 查询当前账户的报修列表。
+ * statusGroup：processing-处理中(0/1)，completed-已完成(2)。
+ */
+export const getRepairOrderList = (
+  params: RepairOrderListQuery
+): Promise<CommonResult<PagerResult<RepairOrderListItem>>> => {
+  return request.get("/repair/orders", params, { isLoading: false });
 };
 
 /**

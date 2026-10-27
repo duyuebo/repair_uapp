@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 当前状态（重要）
 
 - 项目基于 `hello-uniapp` 官方示例模板改名而来（`manifest.json` `name` = `repair_uapp`），大量示例页面仍是模板遗留：`pages/API`、`pages/component`、`pages/template`、`pages/tabBar`、`pages/extUI` 以及 `components/`、`common/` 均为示例/演示代码，不是业务代码。
-- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表、报修详情、我的尚未实现，`pages/records`、`pages/profile` 当前为占位页。
+- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表已实现（处理中/已完成分组、分页、下拉刷新）；报修详情、我的尚未实现，`pages/profile` 当前为占位页。
 - 目前 `utils/` 下的网络、提示、存储、环境封装以及 `api/` 下的接口定义属于本项目自有代码。
 
 ## 技术栈
@@ -47,6 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；首次绑定或换绑需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。
 - `api/repair.ts`：报修业务接口：
   - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目与账户名。
+  - `getRepairOrderList`：`GET /repair/orders`，按 `statusGroup`（`processing`/`completed`）分页查询报修列表。
   - `uploadRepairPhoto`：`POST /repair/orders/photos`，multipart 字段名 `file`，返回 `fileStorePath`。
   - `createRepairOrder`：`POST /repair/orders`，提交联系人、电话、故障描述与 `photoUrls`（最多 5 张）。
 - 后端业务失败通常仍返回 HTTP 200，需检查响应体 `status === 1` 且 `obj` 存在；`status === 0` 时读取 `message` 提示。
@@ -57,11 +58,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 页面加载时调用 `/repair/account/me`，项目名与账户名缓存在 storage `repair_profile`；联系人/电话缓存在 `repair_contact`，输入失焦、页面隐藏/卸载和提交成功时都会保存。
 - 图片选择后立即逐张上传，成功后保留 `fileStorePath` 用于提交；最多 5 张，单张 10MB，仅支持图片。
 - 提交成功弹窗显示 `orderNo`，清空描述与图片，保留联系人和电话。
-- 底部导航组件为 `components/business-tabbar/business-tabbar.vue`；报修记录、我的当前为占位页。
+- 底部导航组件为 `components/business-tabbar/business-tabbar.vue`。
+
+### 报修记录页面 `pages/records/records.vue`
+
+- 页面进入时同时查询 `processing` 与 `completed` 两个分组的第一页，用返回的 `total` 展示 tab 数量。
+- 列表使用 `scroll-view`：切换 tab 时使用各分组缓存，下拉刷新会同时刷新两个分组，滚动到底按当前分组加载下一页。
+- 卡片展示工单号、`statusText`、故障简述与报修时间；时间通过 `utils/format.ts` 的 `formatDateTime` 按字符串格式化，避免时区偏移。
+- 空列表、首次加载失败、加载更多分别有独立状态；网络异常由 request 层提示。
+- 点击工单卡片暂不跳转，详情页后续实现。
 
 ### 已知问题
 
-- 后端返回的 `id`、`projectId`、工单 `id` 等 Long 主键是 19 位，超过 JS `Number.MAX_SAFE_INTEGER`，前端解析会丢失精度。当前报修页只使用 `orderNo`，不依赖这些 ID；后续做详情页前应让后端将 Long 序列化为字符串，或前端使用能保留大整数的解析方式。
+- 后端返回的 `id`、`projectId`、工单 `id` 等 Long 主键是 19 位，超过 JS `Number.MAX_SAFE_INTEGER`。前端业务接口 `api/repair.ts` 中的 ID 字段已统一按 `string` 声明；`endpoint-repair` 已增加 Jackson 配置，将 Long 序列化为字符串（需重启后端生效）。当前报修页与报修列表只使用 `orderNo`，不依赖这些 ID；后续做详情页时可直接按字符串使用。
 
 ### 环境 `utils/env.ts`
 
