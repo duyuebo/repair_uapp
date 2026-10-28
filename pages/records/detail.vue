@@ -63,7 +63,7 @@
         </view>
         <view class="info-row">
           <text class="info-row__label">联系电话：</text>
-          <text class="info-row__value">{{ maskPhone(detail.contactPhone) || "—" }}</text>
+          <text class="info-row__value">{{ formatPhone(detail.contactPhone) || "—" }}</text>
         </view>
         <view class="info-row">
           <text class="info-row__label">故障内容：</text>
@@ -140,7 +140,7 @@
 
         <view v-if="detail.workerPhone" class="info-row">
           <text class="info-row__label">联系电话：</text>
-          <text class="info-row__value">{{ maskPhone(detail.workerPhone) }}</text>
+          <text class="info-row__value">{{ formatPhone(detail.workerPhone) }}</text>
         </view>
         <view v-if="detail.repairRemark" class="info-row">
           <text class="info-row__label">结果回复：</text>
@@ -193,15 +193,14 @@ const STATUS_META = {
   3: { className: "status-pill--canceled", icon: "closeempty" }
 };
 
-const maskPhone = (value) => {
+const formatPhone = (value) => {
   const text = String(value === null || value === undefined ? "" : value).trim();
   if (!text) return "";
 
-  if (/^\d{11}$/.test(text)) {
-    return `${text.slice(0, 3)}****${text.slice(7)}`;
-  }
-  if (text.length >= 8) {
-    return `${text.slice(0, 3)}****${text.slice(-4)}`;
+  // 去掉已有的空格、短横线后，按 3-4-4 分组展示 11 位手机号
+  const digits = text.replace(/[\s-]/g, "");
+  if (/^\d{11}$/.test(digits)) {
+    return `${digits.slice(0, 3)} ${digits.slice(3, 7)} ${digits.slice(7)}`;
   }
   return text;
 };
@@ -325,7 +324,7 @@ export default {
   },
   methods: {
     formatDateTime,
-    maskPhone,
+    formatPhone,
     async loadDetail() {
       if (!this.orderId) return;
 
@@ -566,6 +565,7 @@ export default {
 
 .info-row__label {
   flex-shrink: 0;
+  width: 168rpx;
   color: #4b5563;
 }
 
