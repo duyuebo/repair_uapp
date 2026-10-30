@@ -23,5 +23,9 @@ export interface WxLoginResult {
 export const wxLogin = (
   data: WxLoginPayload
 ): Promise<CommonResult<WxLoginResult>> => {
-  return request.post("/wx/login", data, { isLoading: false });
+  // 登录接口不能携带旧 token，否则后端会在进入登录逻辑前直接返回 401
+  return request.post("/wx/login", data, {
+    isLoading: false,
+    auth: false
+  });
 };

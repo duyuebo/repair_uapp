@@ -16,6 +16,8 @@ export interface RepairContactCache {
 export interface RepairProfileCache {
   projectName?: string | null;
   accountName?: string | null;
+  wxName?: string | null;
+  wxImgAvatar?: string | null;
 }
 
 export const getLoginAccount = (): string => {

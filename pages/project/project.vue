@@ -22,7 +22,7 @@
 export default {
   methods: {
     backToLogin() {
-      uni.reLaunch({ url: "/pages/login/login" });
+      uni.reLaunch({ url: "/pages/login/login?manual=1" });
     }
   }
 };

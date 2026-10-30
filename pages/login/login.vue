@@ -6,7 +6,11 @@
         <text class="brand__title">客户服务报修</text>
       </view>
 
-      <view class="login-form">
+      <view v-if="sessionChecking" class="session-checking">
+        <text class="session-checking__text">正在恢复登录状态...</text>
+      </view>
+
+      <view v-else class="login-form">
         <view class="field" :class="{ 'field--active': activeField === 'account' }">
           <input
             v-model="form.account"
@@ -78,8 +82,15 @@ import { getStorage, setStorage, removeStorage } from "@/utils/storage";
 import { setLoginAccount } from "@/utils/repairCache";
 import request from "@/utils/request";
 import { wxLogin } from "@/api/auth";
+import {
+  clearSessionStorage,
+  enableAutoLogin,
+  getWxCode,
+  isAutoLoginEnabled,
+  REMEMBER_KEY,
+  silentLogin
+} from "@/utils/session";
 
-const REMEMBER_KEY = "login_remember";
 const REPAIR_PAGE = "/pages/repair/repair";
 
 export default {
@@ -94,14 +105,68 @@ export default {
       rememberPassword: true,
       activeField: "",
       passwordFocus: false,
-      loading: false
+      loading: false,
+      sessionChecking: true
     };
   },
-  onLoad() {
+  onLoad(options) {
     this.setPageTop();
     this.restoreRememberedLogin();
+    this.initSession(options || {});
   },
   methods: {
+    async initSession(options) {
+      const skipAutoLogin =
+        String(options.expired || "") === "1" ||
+        String(options.manual || "") === "1";
+
+      const token = getStorage("token");
+      const loginAccount = getStorage("login_account");
+      const autoLogin = isAutoLoginEnabled();
+
+      // 兼容旧版本：已有 token 或登录账号但还没有自动登录标记时补上标记
+      if (!autoLogin && (token || loginAccount)) {
+        enableAutoLogin();
+      }
+
+      if (skipAutoLogin || (!autoLogin && !token && !loginAccount)) {
+        this.sessionChecking = false;
+        return;
+      }
+
+      if (token) {
+        // token 是否过期交给请求层：401 时会自动静默登录并重试
+        this.goRepair();
+        return;
+      }
+
+      const result = await silentLogin();
+      if (result.status === "success") {
+        request.resetUnauthorized();
+        this.goRepair();
+        return;
+      }
+
+      if (result.status === "unbound") {
+        clearSessionStorage();
+      }
+
+      this.sessionChecking = false;
+      toast({
+        title:
+          result.status === "unbound"
+            ? "登录状态已失效，请重新登录"
+            : "自动登录失败，请手动登录"
+      });
+    },
+    goRepair() {
+      uni.reLaunch({
+        url: REPAIR_PAGE,
+        fail: () => {
+          this.sessionChecking = false;
+        }
+      });
+    },
     setPageTop() {
       const systemInfo = uni.getSystemInfoSync();
       // 自定义导航下，内容从状态栏 + 导航栏高度之后开始，避免与微信胶囊重叠
@@ -137,21 +202,6 @@ export default {
         removeStorage(REMEMBER_KEY);
       }
     },
-    getWxCode() {
-      return new Promise((resolve, reject) => {
-        uni.login({
-          provider: "weixin",
-          success: (res) => {
-            if (res.code) {
-              resolve(res.code);
-            } else {
-              reject(new Error("未获取到微信登录 code"));
-            }
-          },
-          fail: reject
-        });
-      });
-    },
     async handleLogin() {
       if (this.loading) return;
 
@@ -173,7 +223,7 @@ export default {
       // 先获取小程序 code，再携带账号密码执行登录
       let code = "";
       try {
-        code = await this.getWxCode();
+        code = await getWxCode();
       } catch (error) {
         this.loading = false;
         toast({ title: "获取微信登录凭证失败，请重试" });
@@ -193,6 +243,8 @@ export default {
           setStorage("token", res.obj.sessionValue);
           // 缓存按登录账号隔离，登录成功后记录当前账号
           setLoginAccount(account);
+          // 记录自动登录标记，下次打开小程序无需再次输入账号密码
+          enableAutoLogin();
           // 新 token 已生效，允许后续 401 重新触发登录失效处理
           request.resetUnauthorized();
 
@@ -262,6 +314,19 @@ export default {
   line-height: 1.4;
   color: #1f2937;
   letter-spacing: 2rpx;
+}
+
+.session-checking {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 120rpx;
+}
+
+.session-checking__text {
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: #9ca3af;
 }
 
 .login-form {

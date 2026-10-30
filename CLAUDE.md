@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 当前状态（重要）
 
 - 项目基于 `hello-uniapp` 官方示例模板改名而来（`manifest.json` `name` = `repair_uapp`），大量示例页面仍是模板遗留：`pages/API`、`pages/component`、`pages/template`、`pages/tabBar`、`pages/extUI` 以及 `components/`、`common/` 均为示例/演示代码，不是业务代码。
-- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表已实现（处理中/已完成分组、分页、下拉刷新）；报修详情、我的尚未实现，`pages/profile` 当前为占位页。
+- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表已实现（处理中/已完成分组、分页、下拉刷新）；报修详情已实现；我的页面已实现（账户资料卡、常用联系人、退出登录）。
 - 目前 `utils/` 下的网络、提示、存储、环境封装以及 `api/` 下的接口定义属于本项目自有代码。
 
 ## 技术栈
@@ -37,20 +37,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 导出一个 `UniRequest` 单例，提供 `get/post/put/delete/upload/all` 方法。`upload` 用于 `uni.uploadFile` 场景（如图片上传），复用 token 与 Loading 逻辑，并自动移除 `Content-Type` 以生成 multipart 边界。
 - `baseUrl` 来自 `utils/env.ts`；传入 `http(s)://` 绝对路径时不拼接。
-- 请求拦截器：从 `utils/storage.ts` 读取 `token` 写入请求头 `Authorization: Bearer <token>`。
+- 请求拦截器：从 `utils/storage.ts` 读取 `token` 写入请求头 `Authorization: Bearer <token>`；单请求传 `{ auth: false }` 时不注入 token，登录接口必须使用该配置。后端 JWT 过滤器会在进入 `/wx/login` 逻辑前校验收到的 `Authorization`，携带失效 token 会直接返回 401。
 - 响应拦截器：成功时直接返回 `res.data`（页面可直接解构业务数据）；失败时调用 `toast` 提示。
 - 内置 Loading 防抖：默认 `isLoading: true`，并发请求全部完成后再延迟 500ms 关闭；单请求可传 `{ isLoading: false }` 静默。
-- `statusCode === 401` 时弹 `modal` 提示、清除本地 token 并 `uni.reLaunch` 到 `/pages/login/login`。
+- `statusCode === 401` 时先调用 `utils/session.ts` 的静默登录续期，成功后用新 token 重试原请求一次；并发 401 共享同一个续期 Promise。静默登录失败才弹 `modal` 并 `uni.reLaunch` 到 `/pages/login/login?expired=1`。
 
 ### 接口层 `api/`
 
-- `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；首次绑定或换绑需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。
+- `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；首次绑定或换绑需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。该接口固定使用 `{ auth: false }`，避免携带旧 token。
 - `api/repair.ts`：报修业务接口：
   - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目与账户名。
   - `getRepairOrderList`：`GET /repair/orders`，按 `statusGroup`（`processing`/`completed`）分页查询报修列表。
   - `uploadRepairPhoto`：`POST /repair/orders/photos`，multipart 字段名 `file`，返回 `fileStorePath`。
   - `createRepairOrder`：`POST /repair/orders`，提交联系人、电话、故障描述与 `photoUrls`（最多 5 张）。
 - 后端业务失败通常仍返回 HTTP 200，需检查响应体 `status === 1` 且 `obj` 存在；`status === 0` 时读取 `message` 提示。
+
+### 登录会话 `utils/session.ts`
+
+- `getWxCode()` 封装 `uni.login`；`silentLogin()` 只用 `code` 调 `/wx/login`，不经 request 封装、不携带 token，成功后写入 `token` 并开启自动登录。
+- `AUTO_LOGIN_KEY = session_auto_login`：手动登录或静默登录成功后写入；退出登录、微信未绑定/账户禁用时清除。
+- 用户主动退出登录时额外清除 `login_remember`，确保回到登录页后需要重新输入账号密码；未绑定/禁用导致的会话清理不清除记住密码。
+- 登录页 `onLoad`：有 `token` 时直接 `reLaunch` 报修页；没有 `token` 但存在自动登录标记时先静默登录；`?manual=1`、`?expired=1` 强制显示表单，避免自动登录循环。
+- 后端 JWT 有效期仅 2 小时，依赖 401 静默续期，不做本地过期判断。
 
 ### 报修页面 `pages/repair/repair.vue`
 
@@ -66,11 +74,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 列表使用 `scroll-view`：切换 tab 时使用各分组缓存，下拉刷新会同时刷新两个分组，滚动到底按当前分组加载下一页。
 - 卡片展示工单号、`statusText`、故障简述与报修时间；时间通过 `utils/format.ts` 的 `formatDateTime` 按字符串格式化，避免时区偏移。
 - 空列表、首次加载失败、加载更多分别有独立状态；网络异常由 request 层提示。
-- 点击工单卡片暂不跳转，详情页后续实现。
+- 点击工单卡片跳转报修详情页。
+
+### 我的页面 `pages/profile/profile.vue`
+
+- 页面进入时校验 `token`，先读取 `repair_profile` / `repair_contact` 缓存，再调用 `/repair/account/me` 刷新账户信息；项目名、账户名、微信昵称与头像写回 `repair_profile`。
+- 蓝色资料卡展示头像、昵称、脱敏账号与所属项目；头像优先使用后端 `wxImgAvatar`，加载失败时回退到 `static/profile/default-avatar.png`。
+- 白色卡片展示报修页缓存的常用联系人与联系电话；接口失败时提供重试入口。
+- 「退出登录」二次确认后调用 `clearSessionStorage({ clearRememberedLogin: true })` 清除 `token`、`login_account`、自动登录标记与 `login_remember`，重置 401 状态并 `reLaunch` 到登录页。
 
 ### 已知问题
 
-- 后端返回的 `id`、`projectId`、工单 `id` 等 Long 主键是 19 位，超过 JS `Number.MAX_SAFE_INTEGER`。前端业务接口 `api/repair.ts` 中的 ID 字段已统一按 `string` 声明；`endpoint-repair` 已增加 Jackson 配置，将 Long 序列化为字符串（需重启后端生效）。当前报修页与报修列表只使用 `orderNo`，不依赖这些 ID；后续做详情页时可直接按字符串使用。
+- 后端返回的 `id`、`projectId`、工单 `id` 等 Long 主键是 19 位，超过 JS `Number.MAX_SAFE_INTEGER`。前端业务接口 `api/repair.ts` 中的 ID 字段已统一按 `string` 声明；`endpoint-repair` 已增加 Jackson 配置，将 Long 序列化为字符串（需重启后端生效）。报修列表与详情页均按字符串使用这些 ID。
 
 ### 环境 `utils/env.ts`
 
@@ -78,7 +93,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 存储 `utils/storage.ts`
 
-`setStorage/getStorage/removeStorage/clearStorage` 对 `uni.*StorageSync` 的同步封装。`token` 约定存在 storage 里（供 `request.ts` 读取）。
+`setStorage/getStorage/removeStorage/clearStorage` 对 `uni.*StorageSync` 的同步封装。`token` 约定存在 storage 里（供 `request.ts` 读取）；`login_account` 用于按账号隔离缓存；`session_auto_login` 表示下次打开小程序是否自动恢复登录；`login_remember` 保存“记住密码”的账号密码，仅在用户主动退出登录时清除。
 
 ### 配置入口
 
