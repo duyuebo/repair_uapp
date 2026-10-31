@@ -3,6 +3,30 @@
     <view class="profile-content">
       <view class="profile-card">
         <view class="profile-card__body">
+          <!-- #ifdef MP-WEIXIN -->
+          <!-- 微信已不再通过 getUserProfile 返回真实资料，头像需使用 chooseAvatar 能力获取 -->
+          <button
+            class="profile-card__avatar profile-card__avatar-btn"
+            open-type="chooseAvatar"
+            hover-class="none"
+            @chooseavatar="handleChooseAvatar"
+          >
+            <image
+              class="profile-card__avatar-image"
+              :src="avatarSrc"
+              mode="aspectFill"
+              @error="handleAvatarError"
+            />
+            <view class="profile-card__avatar-edit">
+              <uni-icons
+                type="camera-filled"
+                :size="14"
+                color="#FFFFFF"
+              ></uni-icons>
+            </view>
+          </button>
+          <!-- #endif -->
+          <!-- #ifndef MP-WEIXIN -->
           <view class="profile-card__avatar">
             <image
               class="profile-card__avatar-image"
@@ -11,6 +35,7 @@
               @error="handleAvatarError"
             />
           </view>
+          <!-- #endif -->
 
           <text class="profile-card__name">{{ displayName }}</text>
 
@@ -91,12 +116,75 @@
       </view>
     </view>
 
+    <view v-if="editorVisible" class="profile-editor">
+      <view class="profile-editor__mask" @tap="closeEditor"></view>
+      <view class="profile-editor__panel">
+        <view class="profile-editor__handle"></view>
+        <text class="profile-editor__title">更新微信资料</text>
+        <text class="profile-editor__subtitle">
+          头像与昵称将展示在个人中心
+        </text>
+
+        <view class="profile-editor__avatar-wrap">
+          <image
+            class="profile-editor__avatar"
+            :src="editorAvatarSrc"
+            mode="aspectFill"
+          />
+        </view>
+
+        <view class="profile-editor__field">
+          <text class="profile-editor__label">微信昵称</text>
+          <input
+            class="profile-editor__input"
+            type="nickname"
+            v-model="editor.wxName"
+            :maxlength="32"
+            :disabled="savingProfile"
+            placeholder="点击输入，可选择“使用微信昵称”"
+            placeholder-class="profile-editor__placeholder"
+            :adjust-position="true"
+            :cursor-spacing="24"
+            @blur="handleNicknameBlur"
+            @confirm="handleNicknameConfirm"
+          />
+        </view>
+
+        <text class="profile-editor__tip">
+          若昵称未自动填入，点击输入框后可在键盘上方选择微信昵称
+        </text>
+
+        <view class="profile-editor__actions">
+          <button
+            class="profile-editor__cancel"
+            hover-class="profile-editor__cancel--pressed"
+            :disabled="savingProfile"
+            @tap="closeEditor"
+          >
+            取消
+          </button>
+          <button
+            class="profile-editor__save"
+            hover-class="profile-editor__save--pressed"
+            :disabled="savingProfile"
+            @tap="saveProfile"
+          >
+            {{ savingProfile ? "保存中..." : "保存" }}
+          </button>
+        </view>
+      </view>
+    </view>
+
     <business-tabbar active="profile" />
   </view>
 </template>
 
 <script>
-import { getRepairAccountProfile } from "@/api/repair";
+import {
+  getRepairAccountProfile,
+  updateRepairAccountProfile,
+  uploadRepairAvatar
+} from "@/api/repair";
 import request from "@/utils/request";
 import { modal, toast } from "@/utils/extendApi";
 import { getStorage } from "@/utils/storage";
@@ -161,7 +249,15 @@ export default {
       avatarError: false,
       profileLoading: false,
       loadError: false,
-      loggingOut: false
+      loggingOut: false,
+      editorVisible: false,
+      savingProfile: false,
+      editor: {
+        avatarLocalPath: "",
+        uploadedPath: "",
+        uploadedPreview: "",
+        wxName: ""
+      }
     };
   },
   computed: {
@@ -169,6 +265,9 @@ export default {
       const avatar = (this.profile.wxImgAvatar || "").trim();
       if (!this.avatarError && avatar) return avatar;
       return DEFAULT_AVATAR;
+    },
+    editorAvatarSrc() {
+      return this.editor.avatarLocalPath || this.avatarSrc;
     },
     displayName() {
       const wxName = (this.profile.wxName || "").trim();
@@ -281,6 +380,135 @@ export default {
         this.profileLoading = false;
       }
     },
+    getEditableWxName() {
+      const wxName = (this.profile.wxName || "").trim();
+      // 旧版默认昵称没有展示价值，留空让用户直接选择微信昵称
+      if (wxName === "微信用户" || wxName === "WeChat User") return "";
+      return wxName;
+    },
+    handleChooseAvatar(event) {
+      const avatarUrl =
+        event && event.detail ? event.detail.avatarUrl : "";
+      if (!avatarUrl) {
+        toast({ title: "未获取到头像，请重试" });
+        return;
+      }
+
+      this.avatarError = false;
+      this.editor = {
+        avatarLocalPath: avatarUrl,
+        uploadedPath: "",
+        uploadedPreview: "",
+        wxName: this.getEditableWxName()
+      };
+      this.editorVisible = true;
+    },
+    handleNicknameBlur(event) {
+      const value = event && event.detail ? event.detail.value : undefined;
+      // 微信「使用微信昵称」可能在 blur 时才回填，兜底同步一次
+      if (typeof value === "string") {
+        this.editor.wxName = value;
+      }
+    },
+    handleNicknameConfirm(event) {
+      this.handleNicknameBlur(event);
+      this.saveProfile();
+    },
+    resetEditor() {
+      this.editor = {
+        avatarLocalPath: "",
+        uploadedPath: "",
+        uploadedPreview: "",
+        wxName: ""
+      };
+    },
+    closeEditor() {
+      if (this.savingProfile) return;
+      this.editorVisible = false;
+      this.resetEditor();
+    },
+    async saveProfile() {
+      if (this.savingProfile) return;
+
+      const wxName = String(this.editor.wxName || "").trim();
+      if (!wxName) {
+        toast({ title: "请输入微信昵称" });
+        return;
+      }
+
+      if (!this.editor.uploadedPath && !this.editor.avatarLocalPath) {
+        toast({ title: "请先选择微信头像" });
+        return;
+      }
+
+      this.savingProfile = true;
+
+      try {
+        let fileStorePath = this.editor.uploadedPath;
+        let avatarPreview =
+          this.editor.uploadedPreview || this.editor.avatarLocalPath;
+
+        // 头像上传成功但资料保存失败时，重试直接复用已上传的 fileStorePath
+        if (!fileStorePath) {
+          const uploadRes = await uploadRepairAvatar(
+            this.editor.avatarLocalPath
+          );
+          const uploadData = uploadRes && uploadRes.obj;
+          if (
+            !uploadRes ||
+            uploadRes.status !== 1 ||
+            !uploadData ||
+            !uploadData.fileStorePath
+          ) {
+            toast({
+              title:
+                (uploadRes && uploadRes.message) || "头像上传失败，请重试"
+            });
+            return;
+          }
+
+          fileStorePath = uploadData.fileStorePath;
+          avatarPreview = uploadData.fileAccessPath || avatarPreview;
+          this.editor.uploadedPath = fileStorePath;
+          this.editor.uploadedPreview = avatarPreview;
+        }
+
+        const updateRes = await updateRepairAccountProfile({
+          wxName,
+          wxImgAvatar: fileStorePath
+        });
+        if (!updateRes || updateRes.status !== 1) {
+          toast({
+            title: (updateRes && updateRes.message) || "资料更新失败，请重试"
+          });
+          return;
+        }
+
+        const updated = updateRes.obj || {};
+        this.avatarError = false;
+        this.profile = {
+          accountName: updated.accountName || this.profile.accountName,
+          projectName: updated.projectName || this.profile.projectName,
+          wxName: updated.wxName || wxName,
+          wxImgAvatar: avatarPreview || updated.wxImgAvatar || fileStorePath
+        };
+
+        setProfileCache({
+          projectName: this.profile.projectName,
+          accountName: this.profile.accountName,
+          wxName: this.profile.wxName,
+          wxImgAvatar: this.profile.wxImgAvatar
+        });
+
+        this.editorVisible = false;
+        this.resetEditor();
+        toast({ title: "资料已更新", icon: "success" });
+      } catch (error) {
+        // 网络异常已由 request 层统一提示
+      } finally {
+        this.savingProfile = false;
+      }
+    },
     handleAvatarError() {
       if (this.avatarError) return;
       this.avatarError = true;
@@ -377,6 +605,7 @@ export default {
 }
 
 .profile-card__avatar {
+  position: relative;
   box-sizing: border-box;
   width: 160rpx;
   height: 160rpx;
@@ -386,6 +615,31 @@ export default {
   border: 6rpx solid rgba(255, 255, 255, 0.92);
   border-radius: 50%;
   box-shadow: 0 10rpx 26rpx rgba(15, 23, 42, 0.16);
+}
+
+.profile-card__avatar-btn {
+  display: block;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+  text-align: center;
+  background-color: #ffffff;
+}
+
+.profile-card__avatar-edit {
+  position: absolute;
+  right: 4rpx;
+  bottom: 4rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44rpx;
+  height: 44rpx;
+  background-color: rgba(15, 23, 42, 0.62);
+  border: 2rpx solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
 }
 
 .profile-card__avatar-image {
@@ -600,6 +854,171 @@ export default {
   opacity: 0.6;
 }
 
+.profile-editor {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.profile-editor__mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+}
+
+.profile-editor__panel {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  padding: 24rpx 40rpx 32rpx;
+  padding-bottom: calc(32rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  margin: 0 auto;
+  background-color: #ffffff;
+  border-radius: 28rpx 28rpx 0 0;
+  box-shadow: 0 -12rpx 40rpx rgba(15, 23, 42, 0.12);
+}
+
+.profile-editor__handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 24rpx;
+  background-color: #e5e7eb;
+  border-radius: 4rpx;
+}
+
+.profile-editor__title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #1f2937;
+  text-align: center;
+}
+
+.profile-editor__subtitle {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: #8a94a6;
+  text-align: center;
+}
+
+.profile-editor__avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 28rpx;
+}
+
+.profile-editor__avatar {
+  width: 128rpx;
+  height: 128rpx;
+  background-color: #f5f7fa;
+  border: 4rpx solid #eff6ff;
+  border-radius: 50%;
+}
+
+.profile-editor__field {
+  box-sizing: border-box;
+  margin-top: 32rpx;
+  padding: 20rpx 28rpx;
+  background-color: #f7f9fc;
+  border-radius: 20rpx;
+}
+
+.profile-editor__label {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: #8a94a6;
+}
+
+.profile-editor__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 64rpx;
+  padding: 0;
+  margin-top: 8rpx;
+  font-size: 30rpx;
+  line-height: 64rpx;
+  color: #1f2937;
+}
+
+.profile-editor__tip {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #a0a8b5;
+  text-align: center;
+}
+
+.profile-editor__actions {
+  display: flex;
+  margin-top: 36rpx;
+}
+
+.profile-editor__cancel,
+.profile-editor__save {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 88rpx;
+  padding: 0;
+  margin: 0;
+  font-size: 30rpx;
+  font-weight: 500;
+  line-height: 1;
+  border: none;
+  border-radius: 44rpx;
+}
+
+.profile-editor__cancel {
+  flex: 0 0 200rpx;
+  color: #5b6575;
+  background-color: #f0f2f5;
+}
+
+.profile-editor__save {
+  flex: 1;
+  margin-left: 20rpx;
+  color: #ffffff;
+  background-color: #3b82f6;
+}
+
+.profile-editor__cancel--pressed {
+  background-color: #e5e8ec;
+}
+
+.profile-editor__save--pressed {
+  background-color: #2f6bff;
+  opacity: 0.92;
+}
+
+.profile-editor__cancel[disabled] {
+  color: #5b6575;
+  background-color: #f0f2f5;
+  opacity: 0.6;
+}
+
+.profile-editor__save[disabled] {
+  color: #ffffff;
+  background-color: #3b82f6;
+  opacity: 0.6;
+}
+
 @media screen and (max-height: 700px) {
   .profile-card {
     padding-top: 32rpx;
@@ -618,7 +1037,15 @@ export default {
 
 <style>
 /* 微信小程序 button 默认自带 ::after 边框，使用全局选择器确保重置生效 */
-.logout-btn::after {
+.logout-btn::after,
+.profile-card__avatar-btn::after,
+.profile-editor__cancel::after,
+.profile-editor__save::after {
   border: none;
+}
+
+/* placeholder-class 作用在微信原生输入框生成的占位节点上，需要非 scoped 样式 */
+.profile-editor__placeholder {
+  color: #b6bfcc;
 }
 </style>

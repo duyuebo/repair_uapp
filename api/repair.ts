@@ -20,6 +20,16 @@ export interface RepairPhotoUpload {
   fileAccessPath: string;
 }
 
+export interface RepairAvatarUpload {
+  fileStorePath: string;
+  fileAccessPath?: string;
+}
+
+export interface RepairAccountProfileUpdate {
+  wxName: string;
+  wxImgAvatar: string;
+}
+
 export interface RepairOrderPayload {
   contactName: string;
   contactPhone: string;
@@ -91,6 +101,28 @@ export const getRepairAccountProfile = (): Promise<
   CommonResult<RepairAccountProfile>
 > => {
   return request.get("/repair/account/me", {}, { isLoading: false });
+};
+
+/**
+ * 上传当前用户的微信头像。
+ * 后端使用 multipart/form-data，字段名为 file，返回 fileStorePath。
+ */
+export const uploadRepairAvatar = (
+  filePath: string
+): Promise<CommonResult<RepairAvatarUpload>> => {
+  return request.upload("/repair/account/avatar", filePath, "file", {
+    isLoading: false
+  });
+};
+
+/**
+ * 更新当前账户的微信昵称与头像。
+ * wxImgAvatar 传头像上传接口返回的 fileStorePath。
+ */
+export const updateRepairAccountProfile = (
+  data: RepairAccountProfileUpdate
+): Promise<CommonResult<RepairAccountProfile>> => {
+  return request.put("/repair/account/me", data, { isLoading: false });
 };
 
 /**
