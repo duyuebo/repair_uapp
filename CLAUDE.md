@@ -44,7 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 接口层 `api/`
 
-- `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；首次绑定或换绑需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。该接口固定使用 `{ auth: false }`，避免携带旧 token。
+- `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；账号密码登录需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。微信与账户的绑定由后端自动处理：登录成功后自动绑定当前微信，若该微信已绑定其他账户则先解绑旧账户。该接口固定使用 `{ auth: false }`，避免携带旧 token。
 - `api/repair.ts`：报修业务接口：
   - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目与账户名。
   - `getRepairOrderList`：`GET /repair/orders`，按 `statusGroup`（`processing`/`completed`）分页查询报修列表。
