@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 当前状态（重要）
 
 - 项目基于 `hello-uniapp` 官方示例模板改名而来（`manifest.json` `name` = `repair_uapp`），大量示例页面仍是模板遗留：`pages/API`、`pages/component`、`pages/template`、`pages/tabBar`、`pages/extUI` 以及 `components/`、`common/` 均为示例/演示代码，不是业务代码。
-- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表已实现（处理中/已完成分组、分页、下拉刷新）；报修详情已实现；我的页面已实现（账户资料卡、常用联系人、微信头像昵称更新、退出登录）。
+- 登录页已实现并接入后端 `POST /wx/login`：点击登录先获取微信小程序 `code`，再携带账号密码执行登录，成功后将 JWT 写入 storage 的 `token` 并进入 `/pages/repair/repair` 报修页。报修表单已实现（账户信息、图片上传、提交报修）；报修列表已实现（处理中/已完成分组、分页、下拉刷新）；报修详情已实现；我的页面已实现（账户资料卡、微信头像昵称更新、修改密码入口、退出登录），修改密码页已接入 `PUT /repair/account/password`。
 - 目前 `utils/` 下的网络、提示、存储、环境封装以及 `api/` 下的接口定义属于本项目自有代码。
 
 ## 技术栈
@@ -51,6 +51,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `uploadRepairPhoto`：`POST /repair/orders/photos`，multipart 字段名 `file`，返回 `fileStorePath`。
   - `uploadRepairAvatar`：`POST /repair/account/avatar`，multipart 字段名 `file`，返回 `fileStorePath`。
   - `updateRepairAccountProfile`：`PUT /repair/account/me`，提交 `wxName` 与头像上传返回的 `wxImgAvatar`。
+  - `updateRepairAccountPassword`：`PUT /repair/account/password`，提交 `oldPwd` 与 `newPwd`；后端校验新密码不少于 6 个字符、不超过 72 字节，且不能与原密码相同。
   - `createRepairOrder`：`POST /repair/orders`，提交联系人、电话、故障描述与 `photoUrls`（最多 5 张）。
 - 后端业务失败通常仍返回 HTTP 200，需检查响应体 `status === 1` 且 `obj` 存在；`status === 0` 时读取 `message` 提示。
 
@@ -80,12 +81,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 我的页面 `pages/profile/profile.vue`
 
-- 页面进入时校验 `token`，先读取 `repair_profile` / `repair_contact` 缓存，再调用 `/repair/account/me` 刷新账户信息；项目名、账户名、微信昵称与头像写回 `repair_profile`。
+- 页面进入时校验 `token`，先读取 `repair_profile` 缓存，再调用 `/repair/account/me` 刷新账户信息；项目名、账户名、微信昵称与头像写回 `repair_profile`。
 - 蓝色资料卡展示头像、昵称、脱敏账号与所属项目；头像优先使用后端 `wxImgAvatar`，加载失败时回退到 `static/profile/default-avatar.png`。
 - 点击头像使用微信官方「头像昵称填写能力」更新资料：`button open-type="chooseAvatar"` 选择微信头像，`input type="nickname"` 填写或一键使用微信昵称。`getUserProfile` 已不再返回真实头像昵称，不再使用。
 - 保存时先调用 `POST /repair/account/avatar` 上传头像拿到 `fileStorePath`，再调用 `PUT /repair/account/me` 提交 `wxName` 与 `wxImgAvatar`；成功后同步资料卡与 `repair_profile` 缓存，头像已上传但保存失败时重试复用已上传路径。
-- 白色卡片展示报修页缓存的常用联系人与联系电话；接口失败时提供重试入口。
+- 白色菜单卡提供「修改密码」入口，点击进入 `/pages/profile/password`；原常用联系人、联系电话展示已移除。接口失败时提供重试入口。
 - 「退出登录」二次确认后调用 `clearSessionStorage({ clearRememberedLogin: true })` 清除 `token`、`login_account`、自动登录标记与 `login_remember`，重置 401 状态并 `reLaunch` 到登录页。
+
+### 修改密码页面 `pages/profile/password.vue`
+
+- 页面进入时校验 `token`；表单包含原密码、新密码、重复新密码，三个输入框均支持显示/隐藏密码。
+- 提交前校验原密码与新密码非空、新密码不少于 6 位、新旧密码不同、两次新密码一致。
+- 调用 `updateRepairAccountPassword`（`PUT /repair/account/password`）提交 `oldPwd`、`newPwd`；密码不 trim 后提交。成功后同步更新 `login_remember` 中保存的密码，提示并返回「我的」页面。
 
 ### 已知问题
 

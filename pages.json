@@ -70,6 +70,15 @@
 			}
 		},
 		{
+			"path": "pages/profile/password",
+			"style": {
+				"navigationBarTitleText": "修改密码",
+				"navigationBarTextStyle": "black",
+				"navigationBarBackgroundColor": "#FFFFFF",
+				"backgroundColor": "#F5F7FA"
+			}
+		},
+		{
 			"path": "pages/tabBar/component/component",
 			"style": {
 				"navigationBarTitleText": "内置组件",

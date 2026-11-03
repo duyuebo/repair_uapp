@@ -30,6 +30,11 @@ export interface RepairAccountProfileUpdate {
   wxImgAvatar: string;
 }
 
+export interface RepairAccountPasswordUpdate {
+  oldPwd: string;
+  newPwd: string;
+}
+
 export interface RepairOrderPayload {
   contactName: string;
   contactPhone: string;
@@ -123,6 +128,16 @@ export const updateRepairAccountProfile = (
   data: RepairAccountProfileUpdate
 ): Promise<CommonResult<RepairAccountProfile>> => {
   return request.put("/repair/account/me", data, { isLoading: false });
+};
+
+/**
+ * 修改当前账户登录密码。
+ * 后端校验新密码不少于 6 个字符、不超过 72 字节，且不能与原密码相同。
+ */
+export const updateRepairAccountPassword = (
+  data: RepairAccountPasswordUpdate
+): Promise<CommonResult<void>> => {
+  return request.put("/repair/account/password", data, { isLoading: false });
 };
 
 /**

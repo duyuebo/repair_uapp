@@ -68,27 +68,21 @@
         </view>
       </view>
 
-      <view class="info-card">
-        <view class="info-row">
-          <view class="info-row__icon">
-            <uni-icons type="person" :size="20" color="#3B82F6"></uni-icons>
+      <view class="menu-card">
+        <view
+          class="menu-row"
+          hover-class="menu-row--pressed"
+          :hover-stay-time="60"
+          @tap="goChangePassword"
+        >
+          <view class="menu-row__icon">
+            <uni-icons type="locked-filled" :size="20" color="#3B82F6"></uni-icons>
           </view>
-          <view class="info-row__body">
-            <text class="info-row__label">常用联系人</text>
-            <text class="info-row__value">{{ contactName }}</text>
+          <view class="menu-row__body">
+            <text class="menu-row__title">修改密码</text>
+            <text class="menu-row__desc">修改当前账号的登录密码</text>
           </view>
-        </view>
-
-        <view class="info-row__divider"></view>
-
-        <view class="info-row">
-          <view class="info-row__icon">
-            <uni-icons type="phone" :size="20" color="#3B82F6"></uni-icons>
-          </view>
-          <view class="info-row__body">
-            <text class="info-row__label">联系电话</text>
-            <text class="info-row__value">{{ contactPhoneText }}</text>
-          </view>
+          <uni-icons type="right" :size="16" color="#C7CDD6"></uni-icons>
         </view>
       </view>
 
@@ -190,7 +184,6 @@ import { modal, toast } from "@/utils/extendApi";
 import { getStorage } from "@/utils/storage";
 import { clearSessionStorage } from "@/utils/session";
 import {
-  getContactCache,
   getLoginAccount,
   getProfileCache,
   setLoginAccount,
@@ -221,17 +214,6 @@ const maskAccount = (value) => {
   return `${text.slice(0, 3)}****${text.slice(-3)}`;
 };
 
-const formatPhone = (value) => {
-  const text = String(value === null || value === undefined ? "" : value).trim();
-  if (!text) return "";
-
-  const digits = text.replace(/[\s-]/g, "");
-  if (/^\d{11}$/.test(digits)) {
-    return `${digits.slice(0, 3)} ${digits.slice(3, 7)} ${digits.slice(7)}`;
-  }
-  return text;
-};
-
 export default {
   name: "ProfilePage",
   data() {
@@ -241,10 +223,6 @@ export default {
         projectName: "",
         wxName: "",
         wxImgAvatar: ""
-      },
-      contact: {
-        contactName: "",
-        contactPhone: ""
       },
       avatarError: false,
       profileLoading: false,
@@ -290,14 +268,6 @@ export default {
       const name = (this.profile.projectName || "").trim();
       if (name) return name;
       return this.profileLoading ? "加载中..." : "未绑定项目";
-    },
-    contactName() {
-      const name = (this.contact.contactName || "").trim();
-      return name || this.displayName;
-    },
-    contactPhoneText() {
-      const phone = formatPhone(this.contact.contactPhone);
-      return phone || "未设置";
     }
   },
   onLoad() {
@@ -312,7 +282,6 @@ export default {
   methods: {
     restoreCache() {
       const cachedProfile = getProfileCache() || {};
-      const cachedContact = getContactCache() || {};
       const loginAccount = getLoginAccount();
 
       this.profile = {
@@ -320,10 +289,6 @@ export default {
         projectName: cachedProfile.projectName || "",
         wxName: cachedProfile.wxName || "",
         wxImgAvatar: cachedProfile.wxImgAvatar || ""
-      };
-      this.contact = {
-        contactName: cachedContact.contactName || "",
-        contactPhone: cachedContact.contactPhone || ""
       };
     },
     async loadProfile() {
@@ -364,15 +329,6 @@ export default {
           wxName: data.wxName,
           wxImgAvatar: data.wxImgAvatar
         });
-
-        // 联系人缓存可能已在报修页更新，进入个人中心时同步展示
-        const cachedContact = getContactCache();
-        if (cachedContact) {
-          this.contact = {
-            contactName: cachedContact.contactName || this.contact.contactName,
-            contactPhone: cachedContact.contactPhone || this.contact.contactPhone
-          };
-        }
       } catch (error) {
         this.loadError = true;
         // 网络异常已由 request 层统一提示
@@ -512,6 +468,11 @@ export default {
     handleAvatarError() {
       if (this.avatarError) return;
       this.avatarError = true;
+    },
+    goChangePassword() {
+      uni.navigateTo({
+        url: "/pages/profile/password"
+      });
     },
     async handleLogout() {
       if (this.loggingOut) return;
@@ -740,7 +701,7 @@ export default {
   white-space: nowrap;
 }
 
-.info-card {
+.menu-card {
   flex-shrink: 0;
   margin-top: 24rpx;
   overflow: hidden;
@@ -749,15 +710,19 @@ export default {
   box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
 }
 
-.info-row {
+.menu-row {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  height: 104rpx;
+  height: 112rpx;
   padding: 0 28rpx;
 }
 
-.info-row__icon {
+.menu-row--pressed {
+  background-color: #f7f9fc;
+}
+
+.menu-row__icon {
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -768,36 +733,28 @@ export default {
   border-radius: 18rpx;
 }
 
-.info-row__body {
+.menu-row__body {
   display: flex;
   flex: 1;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  margin-right: 12rpx;
   margin-left: 18rpx;
 }
 
-.info-row__label {
-  font-size: 24rpx;
-  line-height: 1.3;
-  color: #8a94a6;
-}
-
-.info-row__value {
-  margin-top: 6rpx;
-  overflow: hidden;
+.menu-row__title {
   font-size: 28rpx;
   font-weight: 500;
   line-height: 1.4;
   color: #1f2937;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.info-row__divider {
-  height: 2rpx;
-  margin-left: 106rpx;
-  background-color: #f0f2f5;
+.menu-row__desc {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
+  color: #8a94a6;
 }
 
 .profile-retry {
