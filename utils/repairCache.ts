@@ -16,6 +16,7 @@ export interface RepairContactCache {
 export interface RepairProfileCache {
   projectName?: string | null;
   accountName?: string | null;
+  accountRealName?: string | null;
   wxName?: string | null;
   wxImgAvatar?: string | null;
 }
@@ -47,5 +48,9 @@ export const getProfileCache = (): RepairProfileCache | null => {
 };
 
 export const setProfileCache = (value: RepairProfileCache) => {
-  setStorage(scopedKey(PROFILE_KEY_PREFIX), value);
+  // 与已有缓存合并，避免局部更新（如我的页面保存资料）丢字段
+  setStorage(scopedKey(PROFILE_KEY_PREFIX), {
+    ...getProfileCache(),
+    ...value
+  });
 };

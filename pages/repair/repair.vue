@@ -229,7 +229,10 @@ export default {
       const profile = getProfileCache();
       if (profile) {
         this.projectName = profile.projectName || "";
-        this.form.contactName = profile.accountName || "";
+        // 联系人默认取真实姓名，联系电话默认取登录账号
+        this.form.contactName =
+          profile.accountRealName || profile.accountName || "";
+        this.form.contactPhone = profile.accountName || "";
       }
 
       const contact = getContactCache();
@@ -276,14 +279,25 @@ export default {
         }
 
         this.projectName = profile.projectName || "";
-        if (!this.form.contactName) {
-          this.form.contactName = profile.accountName || "";
+
+        const accountName = (profile.accountName || "").trim();
+        const accountRealName = (profile.accountRealName || "").trim();
+        const contactName = (this.form.contactName || "").trim();
+
+        // 默认联系人使用真实姓名；兼容旧版本把账户名缓存为联系人的情况
+        if (!contactName || (accountRealName && contactName === accountName)) {
+          this.form.contactName = accountRealName || accountName;
+        }
+        // 默认联系电话使用登录账号
+        if (!(this.form.contactPhone || "").trim()) {
+          this.form.contactPhone = accountName;
         }
 
         // 后端 Long 主键为 19 位，超过 JS 安全整数范围，前端暂不缓存精度已丢失的 ID。
         setProfileCache({
           projectName: profile.projectName,
-          accountName: profile.accountName
+          accountName: profile.accountName,
+          accountRealName: profile.accountRealName
         });
         this.saveContactCache();
       } catch (error) {

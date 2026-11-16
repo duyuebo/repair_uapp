@@ -10,6 +10,7 @@ export interface RepairAccountProfile {
   projectId: string | null;
   projectName: string | null;
   accountName: string | null;
+  accountRealName: string | null;
   wxName: string | null;
   wxImgAvatar: string | null;
   wxOpenid: string | null;
@@ -100,7 +101,8 @@ export interface RepairOrderDetail {
 }
 
 /**
- * 获取当前登录账户信息，用于展示项目名称和默认联系人。
+ * 获取当前登录账户信息，用于展示项目名称和默认联系人/联系电话。
+ * 默认联系人取 accountRealName，默认联系电话取 accountName。
  */
 export const getRepairAccountProfile = (): Promise<
   CommonResult<RepairAccountProfile>

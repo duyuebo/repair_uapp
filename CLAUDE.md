@@ -46,7 +46,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `api/auth.ts`：微信登录接口 `wxLogin`，对应后端 `POST /wx/login`。仅传 `code` 为静默登录；账号密码登录需同时传 `accountName`、`accountPwd`，成功返回 JWT（`obj.sessionValue`）。微信与账户的绑定由后端自动处理：登录成功后自动绑定当前微信，若该微信已绑定其他账户则先解绑旧账户。该接口固定使用 `{ auth: false }`，避免携带旧 token。
 - `api/repair.ts`：报修业务接口：
-  - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目与账户名。
+  - `getRepairAccountProfile`：`GET /repair/account/me`，获取当前账户绑定的项目、账户名与真实姓名（`accountRealName`）。
   - `getRepairOrderList`：`GET /repair/orders`，按 `statusGroup`（`processing`/`completed`）分页查询报修列表。
   - `uploadRepairPhoto`：`POST /repair/orders/photos`，multipart 字段名 `file`，返回 `fileStorePath`。
   - `uploadRepairAvatar`：`POST /repair/account/avatar`，multipart 字段名 `file`，返回 `fileStorePath`。
@@ -66,7 +66,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 报修页面 `pages/repair/repair.vue`
 
 - 登录成功后由登录页 `reLaunch` 到报修页；无 token 时页面会跳回登录页。
-- 页面加载时调用 `/repair/account/me`，项目名与账户名缓存在 storage `repair_profile`；联系人/电话缓存在 `repair_contact`，输入失焦、页面隐藏/卸载和提交成功时都会保存。
+- 页面加载时调用 `/repair/account/me`，项目名、账户名与真实姓名缓存在 storage `repair_profile`；默认联系人取 `accountRealName`（为空时回退 `accountName`），默认联系电话取 `accountName`。联系人/电话缓存在 `repair_contact`，输入失焦、页面隐藏/卸载和提交成功时都会保存，用户手动修改过的值会覆盖默认值。
 - 图片选择后立即逐张上传，成功后保留 `fileStorePath` 用于提交；最多 5 张，单张 10MB，仅支持图片。
 - 提交成功弹窗显示 `orderNo`，清空描述与图片，保留联系人和电话。
 - 底部导航组件为 `components/business-tabbar/business-tabbar.vue`。
