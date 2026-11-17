@@ -72,9 +72,6 @@
                 }
             },
             "orientation" : [ "portrait-primary" ]
-        },
-        "uniStatistics" : {
-            "enable" : true
         }
     },
     "quickapp" : {},
@@ -97,29 +94,23 @@
     "mp-weixin" : {
         "appid" : "wxfaa4731e370dadb7",
         "setting" : {
-            "urlCheck" : false
+            "urlCheck" : false,
+            "minified" : true
         },
         "usingComponents" : true,
-        "permission" : {
-            "scope.userLocation" : {
-                "desc" : "演示定位能力"
-            }
-        },
+        "permission" : {},
         "uniStatistics" : {
-            "enable" : true
+            "enable" : false
+        },
+        "optimization" : {
+            "subPackages" : true // 开启分包优化（自动将分包用到的组件/JS提取到分包中）
         }
     },
     "mp-alipay" : {
-        "usingComponents" : true,
-        "uniStatistics" : {
-            "enable" : true
-        }
+        "usingComponents" : true
     },
     "mp-baidu" : {
         "usingComponents" : true,
-        "uniStatistics" : {
-            "enable" : true
-        },
         "dynamicLib" : {
             "editorLib" : {
                 "provider" : "swan-editor"
@@ -127,16 +118,10 @@
         }
     },
     "mp-toutiao" : {
-        "usingComponents" : true,
-        "uniStatistics" : {
-            "enable" : true
-        }
+        "usingComponents" : true
     },
     "mp-jd" : {
-        "usingComponents" : true,
-        "uniStatistics" : {
-            "enable" : true
-        }
+        "usingComponents" : true
     },
     "h5" : {
         "template" : "template.h5.html",
@@ -153,39 +138,10 @@
         },
         "async" : {
             "timeout" : 20000
-        },
-        "uniStatistics" : {
-            "enable" : true
         }
     },
     "vueVersion" : "3",
-    "mp-kuaishou" : {
-        "uniStatistics" : {
-            "enable" : true
-        }
-    },
-    "mp-lark" : {
-        "uniStatistics" : {
-            "enable" : true
-        }
-    },
-    "mp-qq" : {
-        "uniStatistics" : {
-            "enable" : true
-        }
-    },
-    "quickapp-webview-huawei" : {
-        "uniStatistics" : {
-            "enable" : true
-        }
-    },
-    "quickapp-webview-union" : {
-        "uniStatistics" : {
-            "enable" : true
-        }
-    },
     "uniStatistics" : {
-        "version" : "2",
-        "enable" : true
+        "enable" : false
     }
 }
